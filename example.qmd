@@ -1,0 +1,155 @@
+---
+title: "Interactive Data Exploration with Shiny"
+format: html
+server: shiny
+---
+
+# Interactive Data Analysis Dashboard
+
+This document demonstrates how to create interactive visualizations using Shiny for Python within a Quarto document.
+
+## Dataset Overview
+
+We'll explore a synthetic dataset of student performance across different subjects and study methods.
+
+```{python}
+#| context: setup
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from shiny import ui, render, reactive
+from shiny.express import input
+
+# Generate synthetic data
+np.random.seed(42)
+n_students = 200
+
+data = pd.DataFrame({
+    'student_id': range(1, n_students + 1),
+    'study_method': np.random.choice(['Online', 'In-person', 'Hybrid'], n_students),
+    'hours_studied': np.random.normal(15, 5, n_students).clip(1, 30),
+    'math_score': np.random.normal(75, 15, n_students).clip(0, 100),
+    'science_score': np.random.normal(78, 12, n_students).clip(0, 100),
+    'english_score': np.random.normal(80, 10, n_students).clip(0, 100)
+})
+
+# Add some correlation between hours studied and scores
+for subject in ['math_score', 'science_score', 'english_score']:
+    correlation_factor = np.random.normal(0.3, 0.1)
+    data[subject] += data['hours_studied'] * correlation_factor
+    data[subject] = data[subject].clip(0, 100)
+```
+
+## Interactive Analysis
+
+Use the controls below to explore the relationship between study hours and academic performance:
+
+```{python}
+ui.input_selectize(
+    "subject",
+    "Select Subject:",
+    choices=["math_score", "science_score", "english_score"],
+    selected="math_score"
+)
+
+ui.input_checkbox_group(
+    "study_methods",
+    "Study Methods to Include:",
+    choices=["Online", "In-person", "Hybrid"],
+    selected=["Online", "In-person", "Hybrid"]
+)
+
+ui.input_slider(
+    "min_hours",
+    "Minimum Study Hours:",
+    min=1,
+    max=30,
+    value=1,
+    step=1
+)
+```
+
+### Scatter Plot
+
+```{python}
+@render.plot
+def scatter_plot():
+    # Filter data based on inputs
+    filtered_data = data[
+        (data['study_method'].isin(input.study_methods())) &
+        (data['hours_studied'] >= input.min_hours())
+    ]
+    
+    if filtered_data.empty:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.text(0.5, 0.5, 'No data matches the selected criteria', 
+                ha='center', va='center', transform=ax.transAxes)
+        ax.set_title('No Data Available')
+        return fig
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Create scatter plot with different colors for each study method
+    colors = {'Online': 'blue', 'In-person': 'red', 'Hybrid': 'green'}
+    
+    for method in input.study_methods():
+        method_data = filtered_data[filtered_data['study_method'] == method]
+        if not method_data.empty:
+            ax.scatter(method_data['hours_studied'], 
+                      method_data[input.subject()], 
+                      c=colors[method], 
+                      label=method, 
+                      alpha=0.6)
+    
+    ax.set_xlabel('Hours Studied')
+    ax.set_ylabel(f'{input.subject().replace("_", " ").title()}')
+    ax.set_title(f'{input.subject().replace("_", " ").title()} vs Study Hours')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    return fig
+```
+
+### Summary Statistics
+
+```{python}
+@render.table
+def summary_stats():
+    # Filter data based on inputs
+    filtered_data = data[
+        (data['study_method'].isin(input.study_methods())) &
+        (data['hours_studied'] >= input.min_hours())
+    ]
+    
+    if filtered_data.empty:
+        return pd.DataFrame({'Message': ['No data matches the selected criteria']})
+    
+    # Calculate summary statistics by study method
+    summary = filtered_data.groupby('study_method').agg({
+        'hours_studied': ['count', 'mean', 'std'],
+        input.subject(): ['mean', 'std', 'min', 'max']
+    }).round(2)
+    
+    # Flatten column names
+    summary.columns = [f'{col[1]}_{col[0]}' if col[1] else col[0] 
+                      for col in summary.columns]
+    
+    # Reset index to make study_method a column
+    summary = summary.reset_index()
+    
+    return summary
+```
+
+## Key Insights
+
+The interactive visualizations above allow you to explore several interesting patterns in the data:
+
+1. **Study Method Effectiveness**: Compare how different study methods correlate with academic performance
+2. **Study Hours Impact**: Examine the relationship between time invested and scores achieved
+3. **Subject Variations**: Observe how the patterns differ across math, science, and English
+
+Try adjusting the controls to discover insights about student performance patterns!
+
+## Conclusion
+
+This Quarto document demonstrates how to seamlessly integrate interactive Shiny components with narrative content, creating a powerful tool for data exploration and presentation.
